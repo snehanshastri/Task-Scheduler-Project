@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Function to display the main menu
+show_menu() {
+    choice=$(zenity --list --title="Task Scheduler" --text="Choose an option:" \
+    --column="Option" "Add Task" "View Tasks" "Delete Task" "Exit" --timeout=10)
+}
+
+# Function to add a new task
+add_task() {
+    # Create a form for the user to input task details
+    task_name=$(zenity --entry --title="Add Task" --text="Enter task name:")
+    if [[ -n $task_name ]]; then
+        date=$(zenity --calendar --title="Select Date" --date-format="%Y-%m-%d")
+        if [[ -n $date ]]; then
+            time=$(zenity --entry --title="Select Time" --text="Enter time (HH:MM):")
+            if [[ -n $time ]]; then
+                datetime="${date} ${time}"
+                echo "${datetime} - ${task_name}" >> tasks.txt
+                zenity --info --title="Task Added" --text="Task added successfully!"
+            fi
+        fi
+    fi
+}
+
+
+
+# Function to view existing tasks
+view_tasks() {
+    if [[ -s "tasks.txt" ]]; then
+        tasks=$(cat tasks.txt)
+        zenity --text-info --title="View Tasks" --width=400 --height=200 --filename="tasks.txt"
+    else
+        zenity --info --title="View Tasks" --text="No tasks found."
+    fi
+}
+
+# Function to delete a task
+delete_task() {
+    tasks=$(cat tasks.txt)
+    if [[ -n "$tasks" ]]; then
+        task_to_delete=$(zenity --list --title="Delete Task" --text="Select a task to delete:" \
+        --column="Tasks" $tasks)
+        if [[ -n "$task_to_delete" ]]; then
+            sed -i "/$task_to_delete/d" tasks.txt
+            zenity --info --title="Task Deleted" --text="Task deleted successfully!"
+        fi
+    else
+        zenity --info --title="Delete Task" --text="No tasks found."
+    fi
+}
+
+# Main loop
+while true; do
+    show_menu
+    case $choice in
+        "Add Task") add_task;;
+        "View Tasks") view_tasks;;
+        "Delete Task") delete_task;;
+        "Exit") exit;;
+        *) zenity --error --text="Invalid option.";;
+    esac
+done
