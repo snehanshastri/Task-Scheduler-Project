@@ -3,33 +3,51 @@
 # Function to display the main menu
 show_menu() {
     choice=$(zenity --list --title="Task Scheduler" --text="Choose an option:" \
-    --column="Option" "Add Task" "View Tasks" "Delete Task" "Exit" --timeout=10)
+    --column="Option" "Add Task" "View Tasks" "Delete Task" "Search Tasks" "Track Deadlines" "Exit" --timeout=50 \
+    --width=500 --height=400)
 }
 
 # Function to add a new task
-add_task() {
-    # Create a form for the user to input task details
+    add_task() {
+    # Prompt the user to enter the task name
     task_name=$(zenity --entry --title="Add Task" --text="Enter task name:")
     if [[ -n $task_name ]]; then
-        date=$(zenity --calendar --title="Select Date" --date-format="%Y-%m-%d")
-        if [[ -n $date ]]; then
-            time=$(zenity --entry --title="Select Time" --text="Enter time (HH:MM):")
-            if [[ -n $time ]]; then
-                datetime="${date} ${time}"
-                echo "${datetime} - ${task_name}" >> tasks.txt
-                zenity --info --title="Task Added" --text="Task added successfully!"
+        # Get the current datetime
+        current_datetime=$(date "+%Y-%m-%d %H:%M")
+
+        # Prompt the user to select date using calendar
+        chosen_date=$(zenity --calendar --text="Select date for the task:" --date-format="%Y-%m-%d")
+        if [[ -n $chosen_date ]]; then
+            # Prompt the user to enter the time
+            chosen_time=$(zenity --entry --title="Add Task" --text="Enter time for the task (HH:MM):")
+            if [[ -n $chosen_time ]]; then
+                datetime="$chosen_date $chosen_time"
+                # Validate the entered datetime against the current datetime
+                if [[ $(date -d "$datetime" +%s) -ge $(date -d "$current_datetime" +%s) ]]; then
+                    # Check if a task with the same datetime already exists
+                    if ! grep -q "^$datetime" tasks.txt; then
+                        # Prompt the user to select priority level
+                        priority=$(zenity --list --title="Priority Level" --text="Select priority level:" \
+                        --column="Priority" "High" "Medium" "Low")
+                        if [[ -n $priority ]]; then
+                            echo "${datetime} - ${task_name} - Priority: ${priority}" >> tasks.txt
+                            zenity --info --title="Task Added" --text="Task added successfully!"
+                        fi
+                    else
+                        zenity --error --title="Task Conflict" --text="A task already exists at the specified date and time."
+                    fi
+                else
+                    zenity --error --title="Invalid Date" --text="Please enter a future date and time."
+                fi
             fi
         fi
     fi
 }
-
-
-
 # Function to view existing tasks
 view_tasks() {
     if [[ -s "tasks.txt" ]]; then
         tasks=$(cat tasks.txt)
-        zenity --text-info --title="View Tasks" --width=400 --height=200 --filename="tasks.txt"
+        zenity --text-info --title="View Tasks" --width=500 --height=400 --filename="tasks.txt"
     else
         zenity --info --title="View Tasks" --text="No tasks found."
     fi
@@ -42,13 +60,54 @@ delete_task() {
         task_to_delete=$(zenity --list --title="Delete Task" --text="Select a task to delete:" \
         --column="Tasks" $tasks)
         if [[ -n "$task_to_delete" ]]; then
-            sed -i "/$task_to_delete/d" tasks.txt
-            zenity --info --title="Task Deleted" --text="Task deleted successfully!"
+            if zenity --question --title="Confirmation" --text="Are you sure you want to delete the selected task?"; then
+                sed -i "/$task_to_delete/d" tasks.txt
+                zenity --info --title="Task Deleted" --text="Task deleted successfully!"
+            fi
         fi
     else
         zenity --info --title="Delete Task" --text="No tasks found."
     fi
 }
+
+
+# Function to search for tasks
+search_tasks() {
+    search_term=$(zenity --entry --title="Search Tasks" --text="Enter search term:")
+    if [[ -n "$search_term" ]]; then
+        grep -i "$search_term" tasks.txt > search_results.txt
+        if [[ -s "search_results.txt" ]]; then
+            zenity --text-info --title="Search Results" --width=500 --height=400 --filename="search_results.txt"
+        else
+            zenity --info --title="Search Results" --text="No matching tasks found."
+        fi
+        rm -f search_results.txt
+    fi
+}
+
+# Function to track deadlines
+track_deadlines() {
+    current_datetime=$(date +%Y-%m-%d\ %H:%M:%S)
+    tasks=$(awk '{print $1, $2, $3}' tasks.txt)
+    if [[ -n "$tasks" ]]; then
+        while read -r task_datetime; do
+            task_date=$(echo "$task_datetime" | cut -d ' ' -f1)
+            task_time=$(echo "$task_datetime" | cut -d ' ' -f2)
+            task_datetime="${task_date} ${task_time}"
+            if [[ "$(date -d "$task_datetime" +%s)" -lt "$(date -d "$current_datetime" +%s)" ]]; then
+                overdue_tasks+="$(grep "$task_datetime" tasks.txt)\n"
+            fi
+        done <<< "$tasks"
+        if [[ -n "$overdue_tasks" ]]; then
+            zenity --info --title="Overdue Tasks" --text="Overdue Tasks:\n$overdue_tasks"
+        else
+            zenity --info --title="Overdue Tasks" --text="No overdue tasks."
+        fi
+    else
+        zenity --info --title="Track Deadlines" --text="No tasks found."
+    fi
+}
+
 
 # Main loop
 while true; do
@@ -57,7 +116,10 @@ while true; do
         "Add Task") add_task;;
         "View Tasks") view_tasks;;
         "Delete Task") delete_task;;
+        "Search Tasks") search_tasks;;
+        "Track Deadlines") track_deadlines;;
         "Exit") exit;;
         *) zenity --error --text="Invalid option.";;
     esac
 done
+
